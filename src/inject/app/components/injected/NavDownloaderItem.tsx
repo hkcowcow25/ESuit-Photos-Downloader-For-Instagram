@@ -93,6 +93,11 @@ function NavDownloaderItemContent() {
       <div ref={containerRef}>
         <Popover
           open={open}
+          onOpenChange={(next) => {
+            if (next) setOpen(true);
+            else close();
+          }}
+          trigger={["click"]}
           placement="bottomLeft"
           autoAdjustOverflow={false}
           getPopupContainer={() => containerRef.current ?? document.body}
@@ -122,11 +127,18 @@ function NavDownloaderItemContent() {
             </Space>
           }
         >
-          <NavigationItem
-            icon={<Avatar src={appIconUrl()} size={26} shape="square" />}
-            label={APP_NAME}
-            onClick={() => setOpen(true)}
-          />
+          {/*
+            Wrap Instagram's nav item in a real DOM node. PolarisNavigationItem
+            calls onClick() with no mouse event, and antd Popover's trigger
+            crashes on event.clientX when that happens.
+          */}
+          <div>
+            <NavigationItem
+              icon={<Avatar src={appIconUrl()} size={26} shape="square" />}
+              label={APP_NAME}
+              onClick={() => setOpen(true)}
+            />
+          </div>
         </Popover>
       </div>
       <DownloaderModal ref={modalRef} />
