@@ -3,7 +3,7 @@ import type { InjectedComponentProps } from "@/inject/shared/hook-api";
 import type { PatchTargetName } from "@/inject/shared/patch-targets";
 import { getHook } from "../../env";
 import type { IgUserInfo } from "../../ig/instapi";
-import { highlightState } from "../../ig/route";
+import { highlightState, setCurrentProfileUser } from "../../ig/route";
 import { AudioDownloadButton } from "./AudioDownloadButton";
 import { AvatarDownloadButton } from "./AvatarDownloadButton";
 import { NavDownloaderItem } from "./NavDownloaderItem";
@@ -100,6 +100,9 @@ export function registerInjectedComponents(): void {
 
   register<{ user?: Partial<IgUserInfo> }>("PolarisProfileAvatar.next.react", ({ payload, lastElement }) => {
     const userId = payload?.user?.pk;
+    if (userId) {
+      setCurrentProfileUser({ id: String(userId), username: payload?.user?.username });
+    }
     return userId ? (
       <AvatarDownloadButton userId={userId} user={payload?.user}>
         {lastElement}

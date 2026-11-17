@@ -1,9 +1,17 @@
 import { sanitizeFolderName } from "@/shared/filename";
-import { getPageName } from "../ig/route";
+import {
+  getCurrentProfileUser,
+  getPageName,
+  getRouteUserId,
+  isProfilePageName,
+  parseProfilePath,
+  type ProfileTab,
+} from "../ig/route";
+import { fetchUserInfoByUsername } from "../ig/instapi";
 import type { IgRouteContextValue } from "../ig/modules";
 import type { FetchQuery } from "../media/types";
 import { fetchSearchResults } from "./hashtag";
-import { fetchProfilePosts, fetchProfileReels, fetchProfileTagged } from "./profile";
+import { fetchProfilePosts, fetchProfileReels, fetchProfileTagged, type ProfileTarget } from "./profile";
 import { fetchAllCollections, fetchOwnCollection, fetchOwnSavedPosts } from "./saved";
 
 export interface RouteAlbum {
@@ -16,8 +24,33 @@ export interface RouteAlbum {
   isProfile: boolean;
 }
 
+async function resolveProfileTarget(username: string, id?: string): Promise<ProfileTarget> {
+  if (id) return { id, username };
+  const user = await fetchUserInfoByUsername(username);
+  if (!user?.pk) throw new Error(`Unable to find Instagram user ${username}`);
+  return { id: String(user.pk), username: user.username || username };
+}
+
+function profileAlbum(username: string, tab: ProfileTab, id?: string): RouteAlbum {
+  if (tab === "saved") {
+    return { collectionId: "", folderName: "", fetchQuery: fetchAllCollections, isProfile: false };
+  }
+  const key = id || username;
+  const fetch =
+    tab === "reels" ? fetchProfileReels : tab === "tagged" ? fetchProfileTagged : fetchProfilePosts;
+  return {
+    collectionId: `${key}_${tab}`,
+    folderName: username,
+    isProfile: true,
+    fetchQuery: async (context) => fetch(context, await resolveProfileTarget(username, id)),
+  };
+}
+
 /** Works out what "Download Whole Album" should download on the current page. */
-export function resolveRouteAlbum(route: IgRouteContextValue | null): RouteAlbum {
+export function resolveRouteAlbum(
+  route: IgRouteContextValue | null,
+  pathname = typeof window !== "undefined" ? window.location.pathname : "",
+): RouteAlbum {
   const pageName = getPageName(route);
   const params = route?.params ?? {};
   const none: RouteAlbum = { collectionId: "", folderName: "", fetchQuery: null, isProfile: false };
@@ -47,37 +80,16 @@ export function resolveRouteAlbum(route: IgRouteContextValue | null): RouteAlbum
     }
   }
 
-  if (pageName === "profilePage") {
-    const id = route?.rootView?.props?.id;
-    const username = params.username ?? "";
-    if (id) {
-      const target = { id, username };
-      switch (params.tab) {
-        case undefined:
-          return {
-            collectionId: `${id}_posts`,
-            folderName: username,
-            isProfile: true,
-            fetchQuery: (c) => fetchProfilePosts(c, target),
-          };
-        case "reels":
-          return {
-            collectionId: `${id}_reels`,
-            folderName: username,
-            isProfile: true,
-            fetchQuery: (c) => fetchProfileReels(c, target),
-          };
-        case "tagged":
-          return {
-            collectionId: `${id}_tagged`,
-            folderName: username,
-            isProfile: true,
-            fetchQuery: (c) => fetchProfileTagged(c, target),
-          };
-        case "saved":
-          return { ...none, fetchQuery: fetchAllCollections };
-      }
-    }
+  const fromPath = parseProfilePath(pathname);
+  const username = params.username || fromPath?.username || "";
+  const viewed = getCurrentProfileUser();
+  const id =
+    getRouteUserId(route) ||
+    (viewed && (!username || !viewed.username || viewed.username === username) ? viewed.id : undefined);
+  const tab: ProfileTab = fromPath?.tab ?? (params.tab === "reels" || params.tab === "tagged" || params.tab === "saved" ? params.tab : "posts");
+
+  if ((isProfilePageName(pageName) || fromPath) && username) {
+    return profileAlbum(username, tab, id);
   }
 
   return none;

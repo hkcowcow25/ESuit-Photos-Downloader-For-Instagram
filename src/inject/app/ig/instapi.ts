@@ -143,3 +143,28 @@ export async function fetchUserInfo(userId: string): Promise<IgUserInfo | undefi
   const data = await apiGet<{ user?: IgUserInfo }>(`/api/v1/users/${userId}/info/`);
   return data.user;
 }
+
+function asUserInfo(user: (IgUserInfo & { id?: string }) | undefined): IgUserInfo | undefined {
+  if (!user) return undefined;
+  const pk = String(user.pk ?? user.id ?? "");
+  if (!pk) return undefined;
+  return { ...user, pk };
+}
+
+/** Look up a user by username when the route does not include their id. */
+export async function fetchUserInfoByUsername(username: string): Promise<IgUserInfo | undefined> {
+  try {
+    const data = await apiGet<{ data?: { user?: IgUserInfo & { id?: string } }; user?: IgUserInfo & { id?: string } }>(
+      "/api/v1/users/web_profile_info/",
+      { query: { username } },
+    );
+    const user = asUserInfo(data.user ?? data.data?.user);
+    if (user) return user;
+  } catch (error) {
+    log.debug(`web_profile_info failed for ${username}: ${extractErrorMessage(error)}`);
+  }
+  const data = await apiGet<{ user?: IgUserInfo & { id?: string } }>(
+    `/api/v1/users/${encodeURIComponent(username)}/usernameinfo/`,
+  );
+  return asUserInfo(data.user);
+}
